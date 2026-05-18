@@ -1440,15 +1440,86 @@ async function doImport(){
   toast(`Import \u2713 ${entries.length} Eintr\u00e4ge`);
 }
 
+
+// ── AUTO-MIGRATION from previous DB versions ─────────────────
+async function migrateFromOldDB(){
+  const oldNames=['ag6','ausgaben5','ausgaben4','ausgaben3','ausgaben_db_v2','ausgaben_db'];
+  for(const oldName of oldNames){
+    try{
+      const data=await readOldDB(oldName);
+      if(!data||(!data.entries?.length&&!data.cats?.length))continue;
+      console.log('Migrating from',oldName,'– entries:',data.entries?.length);
+      // Import entries
+      for(const e of (data.entries||[])){const{id,...r}=e;await dAdd('entries',r)}
+      // Import cats
+      for(const c of (data.cats||[])){const{id,...r}=c;await dAdd('cats',r)}
+      // Import da
+      for(const d of (data.da||[])){const{id,...r}=d;await dAdd('da',r)}
+      // Import settings
+      if(data.budgets)await dPut('settings',{k:'budgets',value:data.budgets});
+      if(data.income!=null)await dPut('settings',{k:'income',value:data.income});
+      console.log('Migration complete from',oldName);
+      return true; // migrated from first found DB with data
+    }catch(e){console.log('No data in',oldName,e.message||e)}
+  }
+  return false;
+}
+
+function readOldDB(name){
+  return new Promise((ok,fail)=>{
+    const req=indexedDB.open(name);
+    req.onerror=()=>fail(new Error('cannot open'));
+    req.onsuccess=e=>{
+      const odb=e.target.result;
+      const storeNames=[...odb.objectStoreNames];
+      if(!storeNames.includes('entries')){odb.close();fail(new Error('no entries store'));return}
+      const result={entries:[],cats:[],da:[],budgets:null,income:null};
+      let pending=0;
+      const stores=['entries','cats','da','settings'];
+      stores.forEach(s=>{
+        if(!storeNames.includes(s))return;
+        pending++;
+        const req2=odb.transaction(s).objectStore(s).getAll();
+        req2.onsuccess=()=>{
+          if(s==='settings'){
+            (req2.result||[]).forEach(row=>{
+              if(row.k==='budgets'||row.key==='budgets')result.budgets=row.value;
+              if(row.k==='income'||row.key==='income')result.income=row.value;
+            });
+          } else result[s]=req2.result||[];
+          pending--;if(pending===0){odb.close();ok(result)}
+        };
+        req2.onerror=()=>{pending--;if(pending===0){odb.close();ok(result)}};
+      });
+      if(pending===0){odb.close();ok(result)}
+    };
+  });
+}
+
 // ── INIT ─────────────────────────────────────────────────────
 async function init(){
   await openDB();
+  entries=await ga('entries');
+  cats=await ga('cats');
+  // Auto-migrate from older DB versions if current DB is empty
+  if(!entries.length&&!cats.length){
+    const migrated=await migrateFromOldDB();
+    if(migrated){
+      entries=await ga('entries');entries.sort((a,b)=>b.datum.localeCompare(a.datum));
+      cats=await ga('cats');
+      das=await ga('da');
+      const bs2=await dGet('settings','budgets');if(bs2)budgets=bs2.value;
+      const is2=await dGet('settings','income');if(is2)income=is2.value;
+      toast('Daten erfolgreich migriert ✓ '+entries.length+' Einträge');
+    }
+  }
   cats=await ga('cats');
   if(!cats.length){for(const c of DC)await dAdd('cats',c);cats=await ga('cats')}
   // Migrate: ensure subsubs field on all cats
   for(const c of cats){if(!c.subsubs){c.subsubs={};await dPut('cats',c)}}
-  entries=await ga('entries');entries.sort((a,b)=>b.datum.localeCompare(a.datum));
-  das=await ga('da');
+  if(!entries.length)entries=await ga('entries');
+  entries.sort((a,b)=>b.datum.localeCompare(a.datum));
+  if(!das.length)das=await ga('da');
   const bs=await dGet('settings','budgets');if(bs)budgets=bs.value;
   const is=await dGet('settings','income');if(is)income=is.value;
   const ws=await dGet('settings','widgetCfgs');if(ws&&ws.value?.length)widgetCfgs=ws.value;
