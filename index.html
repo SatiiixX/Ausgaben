@@ -247,7 +247,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <button class="tb on" onclick="go(0)">Eingabe</button>
   <button class="tb" onclick="go(1)">Verlauf</button>
   <button class="tb" onclick="go(2)">Charts</button>
-  <button class="tb" onclick="go(3)">Analyse</button>
+  <button class="tb" onclick="go(3)">Analyse<span id="afDot" style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--g);margin-left:4px;vertical-align:middle;display:none"></span></button>
   <button class="tb" onclick="go(4)">Budget</button>
   <button class="tb" onclick="go(5)">Dauer</button>
   <button class="tb" onclick="go(6)">Kategorien</button>
@@ -352,6 +352,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <option value="cntD">Anzahl &#8595;</option>
         </select>
       </div>
+    </div>
+    <div style="padding:8px 13px 10px">
+      <button class="btn sec" onclick="resetAfFilter()" style="font-size:12px;padding:8px">&#10006; Alle Filter zur&#252;cksetzen</button>
     </div>
   </div>
   <div class="sg" id="aSg"></div>
@@ -757,7 +760,7 @@ async function saveE(){
   entries.unshift({...e,id});entries.sort((a,b)=>b.datum.localeCompare(a.datum));
   ['iDes','iNot','iLnk'].forEach(x=>document.getElementById(x).value='');
   document.getElementById('iBet').value='';
-  fillM();rBanner();toast(eur(betrag)+' gespeichert \u2713');
+  fillM();rBanner();if(curTab===3)rA();toast(eur(betrag)+' gespeichert \u2713');
 }
 
 // ── VERLAUF ──────────────────────────────────────────────────
@@ -1090,6 +1093,14 @@ function afPeriodChange(){
   saveAfState();
 }
 
+
+function resetAfFilter(){
+  afState={period:'cm',from:'',to:'',cats:[],subs:[],pay:[],group:'cat',sort:'amtD'};
+  buildAfFilters();
+  saveAfState();
+  rA();
+  toast('Filter zur\u00fcckgesetzt');
+}
 function buildAfFilters(){
   // Category chips
   const selCats=new Set(afState.cats);
@@ -1152,6 +1163,11 @@ async function saveAfState(){
   afState.from=document.getElementById('afFrom')?.value||'';
   afState.to=document.getElementById('afTo')?.value||'';
   await saveSetting('afState',afState);
+  // Show dot on Analyse tab if non-default filters active
+  const hasFilter=afState.cats.length||afState.subs.length||afState.pay.length||
+    afState.period!=='cm'||afState.group!=='cat'||afState.sort!=='amtD';
+  const dot=document.getElementById('afDot');
+  if(dot)dot.style.display=hasFilter?'inline-block':'none';
 }
 
 function rA(){
@@ -1330,7 +1346,7 @@ async function bookDA(id){
   const now=cm(),day=String(Math.min(d.tag,28)).padStart(2,'0');
   const e={datum:`${now}-${day}`,haupt:d.haupt,unter:d.unter,subsub:'',desc:d.name,betrag:d.betrag,zahlung:d.zahlung,notiz:'Dauerauftrag',link:'',type:'da',daId:d.id};
   const eid=await dAdd('entries',e);entries.unshift({...e,id:eid});
-  entries.sort((a,b)=>b.datum.localeCompare(a.datum));fillM();rDA();rBanner();toast(eur(d.betrag)+' gebucht \u2713');
+  entries.sort((a,b)=>b.datum.localeCompare(a.datum));fillM();rDA();rBanner();if(curTab===3)rA();toast(eur(d.betrag)+' gebucht \u2713');
 }
 
 // ── KATEGORIEN ───────────────────────────────────────────────
