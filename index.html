@@ -8,8 +8,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ausgaben">
 <title>Ausgaben-Tracker</title>
+<!-- VERSION: v3.1 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 
@@ -1162,8 +1166,12 @@ async function saveAfState(){
   afState.sort=document.getElementById('afSort')?.value||afState.sort;
   afState.from=document.getElementById('afFrom')?.value||'';
   afState.to=document.getElementById('afTo')?.value||'';
-  await saveSetting('afState',afState);
-  // Show dot on Analyse tab if non-default filters active
+  // Only persist period/group/sort – NOT cats/subs/pay (would hide new entries)
+  await saveSetting('afState',{
+    period:afState.period,group:afState.group,sort:afState.sort,
+    from:afState.from,to:afState.to
+  });
+  // Show dot if any filter active
   const hasFilter=afState.cats.length||afState.subs.length||afState.pay.length||
     afState.period!=='cm'||afState.group!=='cat'||afState.sort!=='amtD';
   const dot=document.getElementById('afDot');
@@ -1346,7 +1354,7 @@ async function bookDA(id){
   const now=cm(),day=String(Math.min(d.tag,28)).padStart(2,'0');
   const e={datum:`${now}-${day}`,haupt:d.haupt,unter:d.unter,subsub:'',desc:d.name,betrag:d.betrag,zahlung:d.zahlung,notiz:'Dauerauftrag',link:'',type:'da',daId:d.id};
   const eid=await dAdd('entries',e);entries.unshift({...e,id:eid});
-  entries.sort((a,b)=>b.datum.localeCompare(a.datum));fillM();rDA();rBanner();if(curTab===3)rA();toast(eur(d.betrag)+' gebucht \u2713');
+  entries.sort((a,b)=>b.datum.localeCompare(a.datum));fillM();rDA();rBanner();rA();toast(eur(d.betrag)+' gebucht \u2713');
 }
 
 // ── KATEGORIEN ───────────────────────────────────────────────
@@ -1540,11 +1548,35 @@ async function init(){
   const is=await dGet('settings','income');if(is)income=is.value;
   const ws=await dGet('settings','widgetCfgs');if(ws&&ws.value?.length)widgetCfgs=ws.value;
   const wv=await dGet('settings','widgetVisible');if(wv)widgetVisible=new Set(wv.value);
-  const as=await dGet('settings','afState');if(as)afState={...afState,...as.value};
+  const as=await dGet('settings','afState');if(as)afState={...afState,...as.value,cats:[],subs:[],pay:[]};
   document.getElementById('iDat').value=new Date().toISOString().slice(0,10);
   fillH();fillM();rBanner();rC();
+  // Restore tab after SW-reload
+  const savedTab=sessionStorage.getItem('restoreTab');
+  if(savedTab!==null){sessionStorage.removeItem('restoreTab');const n=parseInt(savedTab);if(n>0&&n<7)go(n);}
 }
-if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    // Check for updates every time the page loads
+    reg.update();
+    // When a new SW is waiting, activate it immediately
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          // New version available - reload to get fresh content
+          newWorker.postMessage({type: 'SKIP_WAITING'});
+          window.location.reload();
+        }
+      });
+    });
+  }).catch(() => {});
+  // If controlled by new SW, reload once
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) { refreshing=true; sessionStorage.setItem('restoreTab',String(curTab)); window.location.reload(); }
+  });
+}
 init();
 
 
