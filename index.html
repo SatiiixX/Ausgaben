@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ausgaben">
 <title>Ausgaben-Tracker</title>
-<!-- VERSION: v3.1 -->
+<!-- VERSION: v3.3 | BUILD: 2026-05-27 21:42:35 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -362,6 +362,10 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
   </div>
   <div id="aInfoBar" style="display:none;background:rgba(61,220,132,.08);border:1px solid rgba(61,220,132,.18);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:11px;color:var(--g);font-weight:600"></div>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <button onclick="showAllEntries()" style="flex:1;padding:8px;background:var(--bg2);color:var(--t2);border:1px solid var(--b1);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">&#128269; Alle Eintr&#228;ge (ungefiltert)</button>
+    <button onclick="resetAfFilter()" style="flex:1;padding:8px;background:var(--bg2);color:var(--t2);border:1px solid var(--b1);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">&#10006; Filter zur&#252;cksetzen</button>
+  </div>
   <div class="sg" id="aSg"></div>
   <div class="card" style="padding:0"><div id="aList"><div class="emp"><div class="ei">&#128269;</div>Filter setzen um Auswertung zu sehen.</div></div></div>
 </div>
@@ -724,6 +728,7 @@ function fillH(){
 // ── INCOME BANNER ────────────────────────────────────────────
 function rBanner(){
   const mo=cm();
+  // Use in-memory array (already kept in sync after every write)
   const spent=entries.filter(e=>e.datum.startsWith(mo)).reduce((s,e)=>s+e.betrag,0);
   const el=document.getElementById('iBanner');
   if(!income){
@@ -761,11 +766,13 @@ async function saveE(){
     zahlung:document.getElementById('iZah').value,
     notiz:document.getElementById('iNot').value.trim(),
     link:document.getElementById('iLnk').value.trim(),type:'manual'};
-  const id=await dAdd('entries',e);
-  entries.unshift({...e,id});entries.sort((a,b)=>b.datum.localeCompare(a.datum));
+  await dAdd('entries',e);
+  // Reload fresh from DB
+  entries=await ga('entries');
+  entries.sort((a,b)=>b.datum.localeCompare(a.datum));
   ['iDes','iNot','iLnk'].forEach(x=>document.getElementById(x).value='');
   document.getElementById('iBet').value='';
-  fillM();rBanner();if(curTab===3)rA();toast(eur(betrag)+' gespeichert \u2713');
+  fillM();rBanner();if(curTab===3)await rA();toast(eur(betrag)+' gespeichert \u2713');
 }
 
 // ── VERLAUF ──────────────────────────────────────────────────
@@ -851,8 +858,10 @@ async function saveEd(){
   e.notiz=document.getElementById('eNot').value.trim();
   e.link=document.getElementById('eLnk').value.trim();
   if(!e.datum||!e.betrag||e.betrag<=0){toast('Datum und Betrag erforderlich.');return}
-  await dPut('entries',e);entries.sort((a,b)=>b.datum.localeCompare(a.datum));
-  fillM();rV();cO('ovE');toast('Aktualisiert \u2713');
+  await dPut('entries',e);
+  entries=await ga('entries');
+  entries.sort((a,b)=>b.datum.localeCompare(a.datum));
+  fillM();rV();cO('ovE');if(curTab===3)await rA();toast('Aktualisiert \u2713');
 }
 
 // ── DELETE ───────────────────────────────────────────────────
@@ -865,8 +874,10 @@ function askD(id){
 function cCan(){document.getElementById('covC').classList.remove('on');confirmCb=null}
 function cOkFn(){document.getElementById('covC').classList.remove('on');if(confirmCb)confirmCb();confirmCb=null}
 async function doD(id){
-  await dDel('entries',id);entries=entries.filter(e=>e.id!==id);
-  fillM();rV();if(curTab===2)rC();if(curTab===3)rA();rBanner();toast('Gel\u00f6scht');
+  await dDel('entries',id);
+  entries=await ga('entries');
+  entries.sort((a,b)=>b.datum.localeCompare(a.datum));
+  fillM();rV();if(curTab===2)rC();if(curTab===3)await rA();rBanner();toast('Gel\u00f6scht');
 }
 
 // ── MONATSBERICHT ────────────────────────────────────────────
@@ -1218,6 +1229,30 @@ async function saveAfState(){
   if(dot)dot.style.display=hasFilter?'inline-block':'none';
 }
 
+
+async function showAllEntries(){
+  const all=await ga('entries');
+  all.sort((a,b)=>b.datum.localeCompare(a.datum));
+  const infoBar=document.getElementById('aInfoBar');
+  if(infoBar){infoBar.textContent=`Datenbank: ${all.length} Eintr\u00e4ge gesamt (ungefiltert)`;infoBar.style.display='';}
+  const aList=document.getElementById('aList');
+  if(!all.length){aList.innerHTML='<div class="emp">Keine Eintr\u00e4ge in DB.</div>';return;}
+  aList.innerHTML=all.map(e=>`<div class="ae-row" onclick="oDet(${e.id})">
+    <div class="ae-dot" style="background:${cc(e.haupt||'#888')}"></div>
+    <div class="ae-body">
+      <div class="ae-title">${e.desc||e.unter||'?'} ${e.type==='da'?'<span style=\"color:var(--cy);font-size:10px\">[DA]</span>':''}</div>
+      <div class="ae-sub">${e.haupt||'?'} \u00b7 ${e.unter||'?'} \u00b7 ${e.datum||'?'}</div>
+    </div>
+    <div class="ae-right"><div class="ae-amt amt">${eur(e.betrag||0)}</div><div class="ae-cnt">${e.zahlung||''}</div></div>
+  </div>`).join('');
+  // Also show aSg stats
+  const total=all.reduce((s,e)=>s+(e.betrag||0),0);
+  document.getElementById('aSg').innerHTML=`
+    <div class="sc"><div class="sl3">Gesamt DB</div><div class="sv amt cg">${eur(total)}</div></div>
+    <div class="sc"><div class="sl3">Eintr\u00e4ge</div><div class="sv">${all.length}</div></div>
+    <div class="sc"><div class="sl3">DA-Buchungen</div><div class="sv" style="color:var(--cy)">${all.filter(e=>e.type==='da').length}</div></div>
+    <div class="sc"><div class="sl3">Manuell</div><div class="sv">${all.filter(e=>e.type!=='da').length}</div></div>`;
+}
 async function rA(){
   afState.group=document.getElementById('afGroup')?.value||afState.group;
   afState.sort=document.getElementById('afSort')?.value||afState.sort;
@@ -1405,8 +1440,12 @@ async function bookDA(id){
   const d=das.find(x=>x.id===id);if(!d)return;
   const now=cm(),day=String(Math.min(d.tag,28)).padStart(2,'0');
   const e={datum:`${now}-${day}`,haupt:d.haupt,unter:d.unter,subsub:'',desc:d.name,betrag:d.betrag,zahlung:d.zahlung,notiz:'Dauerauftrag',link:'',type:'da',daId:d.id};
-  const eid=await dAdd('entries',e);entries.unshift({...e,id:eid});
-  entries.sort((a,b)=>b.datum.localeCompare(a.datum));fillM();rDA();rBanner();rA();toast(eur(d.betrag)+' gebucht \u2713');
+  await dAdd('entries',e);
+  entries=await ga('entries');
+  entries.sort((a,b)=>b.datum.localeCompare(a.datum));
+  fillM();rDA();rBanner();
+  await rA();
+  toast(eur(d.betrag)+' gebucht ✓');
 }
 
 // ── KATEGORIEN ───────────────────────────────────────────────
