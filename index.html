@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ausgaben">
 <title>Ausgaben-Tracker</title>
-<!-- VERSION: v3.3 | BUILD: 2026-05-27 21:42:35 -->
+<!-- VERSION: v3.6 | BUILD: 2026-05-27 22:01:51 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -240,7 +240,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="ti">
     <div class="tlo"><div class="tm">&#8364;</div><span class="tn">Ausgaben-Tracker</span></div>
     <div class="tr">
-      <div class="pill" id="tpill">&#8212;</div>
+      <div class="pill" id="tpill" onclick="showVersion()" style="cursor:pointer">&#8212;</div>
       <button class="ib" id="exportBtn" title="Daten exportieren (Backup)" onclick="xport()">&#8595;</button>
       <button class="ib" title="Import" onclick="document.getElementById('impF').click()">&#8593;</button>
       <input type="file" id="impF" accept=".json" style="display:none" onchange="importData(this)">
@@ -282,8 +282,31 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 <!-- P1 VERLAUF -->
 <div class="pg" id="p1">
-  <div class="card" style="padding:0">
-    <div class="ms"><select id="vMo" onchange="rV()"></select><button class="bsm" onclick="document.getElementById('vMo').value='';rV()">Alle</button></div>
+  <div class="card" style="padding:0;margin-bottom:10px">
+    <!-- Search -->
+    <div style="padding:8px 12px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:7px">
+      <span style="font-size:15px;flex-shrink:0;color:var(--t3)">&#128269;</span>
+      <input type="search" id="vSearch" placeholder="Suche nach Beschreibung, Kategorie&#8230;" autocomplete="off"
+        style="flex:1;padding:8px 10px;font-size:15px;background:var(--bg2);border:1px solid var(--b1);border-radius:8px;color:var(--t1)"
+        oninput="rV()">
+      <button class="bsm" onclick="clearVSearch()" id="vClearBtn" style="display:none">&#10006;</button>
+    </div>
+    <!-- Filters -->
+    <div style="padding:7px 12px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none">
+      <select id="vMo" onchange="rV()" style="font-size:12px;padding:5px 8px;flex-shrink:0;min-width:0">
+      </select>
+      <select id="vCat" onchange="rV()" style="font-size:12px;padding:5px 8px;flex-shrink:0;min-width:0">
+        <option value="">Alle Kategorien</option>
+      </select>
+      <select id="vPay" onchange="rV()" style="font-size:12px;padding:5px 8px;flex-shrink:0;min-width:0">
+        <option value="">Alle Zahlungsarten</option>
+        <option>EC-Karte</option><option>Bar</option><option>Kreditkarte</option>
+        <option>Lastschrift</option><option>PayPal</option><option>&#220;berweisung</option>
+      </select>
+      <button class="bsm" onclick="clearVFilters()" style="flex-shrink:0;white-space:nowrap">Zur&#252;cksetzen</button>
+    </div>
+    <!-- Results count -->
+    <div id="vCount" style="padding:5px 13px;font-size:10px;font-weight:600;color:var(--t3);letter-spacing:.5px;text-transform:uppercase;display:none"></div>
     <div id="vL"><div class="emp"><div class="ei">&#128203;</div>Noch keine Eintr&#228;ge.</div></div>
   </div>
 </div>
@@ -334,7 +357,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="af-row">
       <span class="af-lbl">Gruppieren</span>
       <div class="af-val">
-        <select id="afGroup" onchange="setTimeout(()=>rA(),50)" style="font-size:13px;padding:6px 10px">
+        <select id="afGroup" onchange="if(this.value==='entry'){afState.sort='dateD';const ss=document.getElementById('afSort');if(ss)ss.value='dateD';}setTimeout(()=>rA(),50)" style="font-size:13px;padding:6px 10px">
           <option value="cat">Hauptkategorie</option>
           <option value="sub">Unterkategorie</option>
           <option value="subsub">Unter-Unterkat.</option>
@@ -409,6 +432,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 </div>
 </div>
+<div id="updateBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:600;background:#f0a500;color:#000;padding:10px 14px;font-size:13px;font-weight:600;text-align:center;cursor:pointer" onclick="window.location.reload(true)">&#8635; Neue Version verf\u00fcgbar &#8211; Tippen zum Aktualisieren</div>
 <div id="toast"></div>
 
 <!-- ENTRY DETAIL -->
@@ -657,11 +681,14 @@ async function saveSetting(k,v){await dPut('settings',{k,value:v})}
 })();
 
 // ── NAV ──────────────────────────────────────────────────────
-function go(i){
+async function go(i){
   document.querySelectorAll('.pg').forEach((p,j)=>p.classList.toggle('on',j===i));
   document.querySelectorAll('.tb').forEach((b,j)=>b.classList.toggle('on',j===i));
   curTab=i;
   document.querySelectorAll('.tb')[i]?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+  // Always reload entries fresh when switching tabs
+  entries=await ga('entries');
+  entries.sort((a,b)=>b.datum.localeCompare(a.datum));
   if(i===0)rBanner();
   if(i===1)rV();
   if(i===2)rC();
@@ -723,6 +750,13 @@ function fillH(){
   syncSubs('iHpt','iUnt','iSS');
   syncSubs('eHpt','eUnt','eSS');
   syncSubs('daHpt','daUnt','daSS');
+  // Update Verlauf category filter
+  const vCat=document.getElementById('vCat');
+  if(vCat){
+    const prev=vCat.value;
+    vCat.innerHTML='<option value="">Alle Kategorien</option>'+cats.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+    if(prev)vCat.value=prev;
+  }
 }
 
 // ── INCOME BANNER ────────────────────────────────────────────
@@ -778,9 +812,35 @@ async function saveE(){
 // ── VERLAUF ──────────────────────────────────────────────────
 function rV(){
   const mo=document.getElementById('vMo').value;
-  const fil=mo?entries.filter(e=>e.datum.startsWith(mo)):entries;
+  const cat=document.getElementById('vCat')?.value||'';
+  const pay=document.getElementById('vPay')?.value||'';
+  const q=(document.getElementById('vSearch')?.value||'').trim().toLowerCase();
+  const clrBtn=document.getElementById('vClearBtn');
+  if(clrBtn)clrBtn.style.display=q?'':'none';
+  let fil=[...entries];
+  if(mo)fil=fil.filter(e=>e.datum.startsWith(mo));
+  if(cat)fil=fil.filter(e=>e.haupt===cat);
+  if(pay)fil=fil.filter(e=>e.zahlung===pay);
+  if(q)fil=fil.filter(e=>((e.desc||'')+(e.haupt||'')+(e.unter||'')+(e.subsub||'')+(e.notiz||'')+(e.zahlung||'')).toLowerCase().includes(q));
+  const countEl=document.getElementById('vCount');
+  const hasFilter=mo||cat||pay||q;
+  if(countEl){
+    if(hasFilter&&fil.length){const t=fil.reduce((s,e)=>s+e.betrag,0);countEl.textContent=fil.length+' Ergebnis'+(fil.length!==1?'se':'')+' \u00b7 '+eur(t);countEl.style.display='';}
+    else countEl.style.display='none';
+  }
   const el=document.getElementById('vL');
-  if(!fil.length){el.innerHTML='<div class="emp"><div class="ei">\ud83d\udccb</div>Keine Eintr\u00e4ge.</div>';return}
+  if(!fil.length){el.innerHTML='<div class="emp"><div class="ei">'+(hasFilter?'\ud83d\udd0d':'')+'</div>'+(hasFilter?'Keine Eintr\u00e4ge f\u00fcr diese Filter.':'Noch keine Eintr\u00e4ge.')+'</div>';return;}
+  function hl(t){if(!q)return t;return String(t).replace(new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),'<mark style="background:rgba(61,220,132,.25);border-radius:2px;padding:0 1px">$1</mark>');}
+  if(q){
+    el.innerHTML=fil.map(e=>`<div class="en" onclick="oDet(${e.id})">
+      <div class="ed" style="background:${cc(e.haupt)}"></div>
+      <div class="eb"><div class="et">${hl(e.desc||e.unter)}</div>
+      <div class="es">${hl(e.haupt)} \u00b7 ${hl(e.unter)} \u00b7 ${fd(e.datum)}</div></div>
+      <div class="er"><div class="ea amt">${eur(e.betrag)}</div><div class="edt">${e.zahlung}</div></div>
+      <button class="xb" onclick="event.stopPropagation();askD(${e.id})">\u00d7</button>
+    </div>`).join('');
+    return;
+  }
   const byM={};fil.forEach(e=>{const m=e.datum.slice(0,7);(byM[m]=byM[m]||[]).push(e)});
   const now=cm();let h='';
   Object.keys(byM).sort().reverse().forEach(m=>{
@@ -796,10 +856,12 @@ function rV(){
         <button class="xb" onclick="event.stopPropagation();askD(${e.id})">\u00d7</button>
       </div>`;
     });
-    if(m<now)h+=`<div class="rep" onclick="oRep('${m}')"><div class="ri">\ud83d\udcca</div><div class="rb"><div class="rt">Monatsbericht ${fm(m)}</div><div class="rs2">${mes.length} Eintr\u00e4ge</div></div><div class="ramt amt cg">${eur(mt)}</div></div>`;
+    if(m<now&&!hasFilter)h+=`<div class="rep" onclick="oRep('${m}')"><div class="ri">\ud83d\udcca</div><div class="rb"><div class="rt">Monatsbericht ${fm(m)}</div><div class="rs2">${mes.length} Eintr\u00e4ge</div></div><div class="ramt amt cg">${eur(mt)}</div></div>`;
   });
   el.innerHTML=h;
 }
+function clearVSearch(){const i=document.getElementById('vSearch');if(i){i.value='';i.focus();}rV();}
+function clearVFilters(){['vSearch','vMo','vCat','vPay'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});rV();}
 
 // ── ENTRY DETAIL ─────────────────────────────────────────────
 function oDet(id){
@@ -1288,12 +1350,13 @@ async function rA(){
   const srt=afState.sort;
 
   if(grp==='entry'){
-    // Show individual entries
+    // Show individual entries - default to date descending
     let sorted=[...fil];
+    const esrt=srt==='amtD'||srt==='amtA'?'dateD':srt; // amount sort not useful for entries
     if(srt==='amtD')sorted.sort((a,b)=>b.betrag-a.betrag);
     else if(srt==='amtA')sorted.sort((a,b)=>a.betrag-b.betrag);
-    else if(srt==='dateD')sorted.sort((a,b)=>b.datum.localeCompare(a.datum));
     else if(srt==='dateA')sorted.sort((a,b)=>a.datum.localeCompare(b.datum));
+    else sorted.sort((a,b)=>b.datum.localeCompare(a.datum)); // default dateD
     document.getElementById('aList').innerHTML=sorted.map(e=>`<div class="ae-row" onclick="oDet(${e.id})">
       <div class="ae-dot" style="background:${cc(e.haupt)}"></div>
       <div class="ae-body"><div class="ae-title">${e.desc||e.unter}</div>
@@ -1341,13 +1404,14 @@ async function rA(){
 }
 
 function afDrillDown(grp,k){
-  // Click on grouped row -> drill into entries
   if(grp==='cat'){afState.cats=[k];afState.subs=[];buildAfFilters();}
   else if(grp==='sub'){afState.subs=[k];}
   else if(grp==='month'){afState.period='range';afState.from=k+'-01';afState.to=k+'-31';buildAfFilters();}
   afState.group='entry';
+  afState.sort='dateD'; // default to date sort for individual entries
   document.getElementById('afGroup').value='entry';
-  saveAfState();rA();
+  document.getElementById('afSort').value='dateD';
+  saveAfState();setTimeout(()=>rA(),50);
 }
 
 // ── BUDGET ───────────────────────────────────────────────────
@@ -1433,19 +1497,47 @@ async function saveDA(){
 function delDA(){
   document.getElementById('cTit').textContent='Dauerauftrag l\u00f6schen?';
   document.getElementById('cMsg').textContent=`"${curDA.name}" wirklich l\u00f6schen?`;
-  confirmCb=async()=>{await dDel('da',curDA.id);das=await ga('da');cO('ovDA');rDA();toast('Gel\u00f6scht')};
+  confirmCb=async()=>{
+    // Delete all entries booked from this DA
+    const daEntries=entries.filter(e=>e.type==='da'&&e.daId===curDA.id);
+    for(const e of daEntries)await dDel('entries',e.id);
+    await dDel('da',curDA.id);
+    // Reload everything
+    entries=await ga('entries');entries.sort((a,b)=>b.datum.localeCompare(a.datum));
+    das=await ga('da');
+    fillM();cO('ovDA');rDA();rBanner();
+    if(curTab===3)await rA();
+    if(curTab===1)rV();
+    toast('Dauerauftrag und '+daEntries.length+' Buchung(en) gel\u00f6scht');
+  };
   cO('ovDA');setTimeout(()=>document.getElementById('covC').classList.add('on'),200);
 }
 async function bookDA(id){
-  const d=das.find(x=>x.id===id);if(!d)return;
-  const now=cm(),day=String(Math.min(d.tag,28)).padStart(2,'0');
-  const e={datum:`${now}-${day}`,haupt:d.haupt,unter:d.unter,subsub:'',desc:d.name,betrag:d.betrag,zahlung:d.zahlung,notiz:'Dauerauftrag',link:'',type:'da',daId:d.id};
-  await dAdd('entries',e);
-  entries=await ga('entries');
-  entries.sort((a,b)=>b.datum.localeCompare(a.datum));
-  fillM();rDA();rBanner();
-  await rA();
-  toast(eur(d.betrag)+' gebucht ✓');
+  try{
+    const d=das.find(x=>x.id===id);
+    if(!d){toast('Fehler: Dauerauftrag nicht gefunden');return;}
+    const now=cm(),day=String(Math.min(d.tag,28)).padStart(2,'0');
+    const datum=`${now}-${day}`;
+    const e={datum,haupt:d.haupt,unter:d.unter,subsub:'',desc:d.name,
+      betrag:Number(d.betrag),zahlung:d.zahlung,notiz:'Dauerauftrag',link:'',
+      type:'da',daId:d.id};
+    const newId=await dAdd('entries',e);
+    // Reload everything from DB
+    entries=await ga('entries');
+    entries.sort((a,b)=>b.datum.localeCompare(a.datum));
+    fillM();rDA();rBanner();
+    if(curTab===3)await rA();
+    // Confirm with details
+    const check=entries.find(x=>x.id===newId);
+    if(check){
+      toast(eur(d.betrag)+' gebucht ✓ ('+datum+' | '+d.haupt+')');
+    } else {
+      toast('Gebucht aber Eintrag nicht gefunden - bitte App neu laden');
+    }
+  }catch(err){
+    toast('Buchungsfehler: '+err.message);
+    console.error('bookDA error:',err);
+  }
 }
 
 // ── KATEGORIEN ───────────────────────────────────────────────
@@ -1628,6 +1720,12 @@ function readOldDB(name){
   });
 }
 
+
+function showVersion(){
+  const mem=entries.length;
+  const msg='Version: v3.3\nEintr\u00e4ge im Speicher: '+mem+'\nKategorien: '+cats.length+'\nDauerauftr\u00e4ge: '+das.length+'\n\n'+(mem===0?'ACHTUNG: 0 Eintr\u00e4ge! Alte gecachte Version l\u00e4uft noch.\nL\u00f6sung: Cache leeren + neu laden.':'Daten geladen.');
+  alert(msg);
+}
 // ── INIT ─────────────────────────────────────────────────────
 async function init(){
   await openDB();
@@ -1649,6 +1747,23 @@ async function init(){
   if(!cats.length){for(const c of DC)await dAdd('cats',c);cats=await ga('cats')}
   // Migrate: ensure subsubs field on all cats
   for(const c of cats){if(!c.subsubs){c.subsubs={};await dPut('cats',c)}}
+  // Migrate: fix old Dauerauftrag records missing fields
+  let daFixed=0;
+  for(const d of das){
+    let changed=false;
+    if(!d.haupt&&d.category){d.haupt=d.category;changed=true;}
+    if(!d.unter&&d.subcategory){d.unter=d.subcategory;changed=true;}
+    if(!d.unter&&d.haupt){
+      // Set first sub of category as default
+      const cat=cats.find(c=>c.name===d.haupt);
+      if(cat&&cat.subs.length){d.unter=cat.subs[0];changed=true;}
+    }
+    if(!d.zahlung){d.zahlung='Lastschrift';changed=true;}
+    if(!d.tag){d.tag=1;changed=true;}
+    if(!d.ab){d.ab=cm();changed=true;}
+    if(changed){await dPut('da',d);daFixed++;}
+  }
+  if(daFixed>0){das=await ga('da');console.log('Migrated '+daFixed+' DA records');}
   if(!entries.length)entries=await ga('entries');
   entries.sort((a,b)=>b.datum.localeCompare(a.datum));
   if(!das.length)das=await ga('da');
@@ -1666,25 +1781,25 @@ async function init(){
   setTimeout(checkBackupReminder, 2000);
 }
 if ('serviceWorker' in navigator) {
+  let refreshing = false;
   navigator.serviceWorker.register('./sw.js').then(reg => {
-    // Check for updates every time the page loads
     reg.update();
-    // When a new SW is waiting, activate it immediately
     reg.addEventListener('updatefound', () => {
-      const newWorker = reg.installing;
-      newWorker.addEventListener('statechange', () => {
-        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-          // New version available - reload to get fresh content
-          newWorker.postMessage({type: 'SKIP_WAITING'});
-          window.location.reload();
+      const nw = reg.installing;
+      nw.addEventListener('statechange', () => {
+        if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+          const bn = document.getElementById('updateBanner');
+          if (bn) bn.style.display = 'block';
         }
       });
     });
   }).catch(() => {});
-  // If controlled by new SW, reload once
-  let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) { refreshing=true; sessionStorage.setItem('restoreTab',String(curTab)); window.location.reload(); }
+    if (!refreshing) {
+      refreshing = true;
+      sessionStorage.setItem('restoreTab', String(curTab));
+      window.location.reload();
+    }
   });
 }
 init();
