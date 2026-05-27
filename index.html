@@ -303,7 +303,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="af-row">
       <span class="af-lbl">Zeitraum</span>
       <div class="af-val">
-        <select id="afPeriod" onchange="afPeriodChange();rA()" style="font-size:13px;padding:6px 10px">
+        <select id="afPeriod" onchange="afPeriodChange();setTimeout(()=>rA(),50)" style="font-size:13px;padding:6px 10px">
           <option value="cm">Dieser Monat</option>
           <option value="lm">Letzter Monat</option>
           <option value="cy">Dieses Jahr</option>
@@ -315,8 +315,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div id="afRangeRow" style="display:none" class="af-row">
       <span class="af-lbl">Von &#8211; Bis</span>
       <div class="af-val" style="display:flex;gap:6px">
-        <input type="date" id="afFrom" onchange="rA()" style="flex:1;font-size:13px;padding:6px 10px">
-        <input type="date" id="afTo" onchange="rA()" style="flex:1;font-size:13px;padding:6px 10px">
+        <input type="date" id="afFrom" onchange="setTimeout(()=>rA(),50)" style="flex:1;font-size:13px;padding:6px 10px">
+        <input type="date" id="afTo" onchange="setTimeout(()=>rA(),50)" style="flex:1;font-size:13px;padding:6px 10px">
       </div>
     </div>
     <div class="af-row">
@@ -334,7 +334,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="af-row">
       <span class="af-lbl">Gruppieren</span>
       <div class="af-val">
-        <select id="afGroup" onchange="rA()" style="font-size:13px;padding:6px 10px">
+        <select id="afGroup" onchange="setTimeout(()=>rA(),50)" style="font-size:13px;padding:6px 10px">
           <option value="cat">Hauptkategorie</option>
           <option value="sub">Unterkategorie</option>
           <option value="subsub">Unter-Unterkat.</option>
@@ -348,7 +348,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="af-row">
       <span class="af-lbl">Sortieren</span>
       <div class="af-val">
-        <select id="afSort" onchange="rA()" style="font-size:13px;padding:6px 10px">
+        <select id="afSort" onchange="setTimeout(()=>rA(),50)" style="font-size:13px;padding:6px 10px">
           <option value="amtD">Betrag &#8595;</option>
           <option value="amtA">Betrag &#8593;</option>
           <option value="dateD">Datum &#8595;</option>
@@ -661,7 +661,7 @@ function go(i){
   if(i===0)rBanner();
   if(i===1)rV();
   if(i===2)rC();
-  if(i===3){buildAfFilters();rA();}
+  if(i===3){buildAfFilters();setTimeout(()=>rA(),50);}
   if(i===4)rB();
   if(i===5)rDA();
   if(i===6)rKat();
@@ -1074,12 +1074,55 @@ async function saveCfg(){
 }
 
 // ── ANALYSE ──────────────────────────────────────────────────
-function getAfEntries(){
+async function getAfEntriesFresh(){
+  // Always reload from DB to ensure DA entries are included
+  const allEntries=await ga('entries');
+  allEntries.sort((a,b)=>b.datum.localeCompare(a.datum));
+  // Sync in-memory array
+  entries=allEntries;
+
   const p=afState.period;
-  const now=new Date(),y=now.getFullYear(),mo=String(now.getMonth()+1).padStart(2,'0');
+  const now=new Date();
+  const y=now.getFullYear();
+  const mo=now.getMonth(); // 0-indexed for Date constructor
+  const moStr=String(mo+1).padStart(2,'0');
   let from='',to='';
-  if(p==='cm'){from=`${y}-${mo}-01`;to=`${y}-${mo}-31`;}
-  else if(p==='lm'){const d=new Date(y,now.getMonth()-1,1);from=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;const d2=new Date(y,now.getMonth(),0);to=`${d2.getFullYear()}-${String(d2.getMonth()+1).padStart(2,'0')}-${d2.getDate()}`;}
+
+  if(p==='cm'){
+    // Use actual last day of month
+    const lastDay=new Date(y,mo+1,0).getDate();
+    from=`${y}-${moStr}-01`;
+    to=`${y}-${moStr}-${String(lastDay).padStart(2,'0')}`;
+  } else if(p==='lm'){
+    const firstOfLm=new Date(y,mo-1,1);
+    const lastOfLm=new Date(y,mo,0);
+    from=`${firstOfLm.getFullYear()}-${String(firstOfLm.getMonth()+1).padStart(2,'0')}-01`;
+    to=`${lastOfLm.getFullYear()}-${String(lastOfLm.getMonth()+1).padStart(2,'0')}-${String(lastOfLm.getDate()).padStart(2,'0')}`;
+  } else if(p==='cy'){
+    from=`${y}-01-01`;to=`${y}-12-31`;
+  } else if(p==='range'){
+    from=afState.from;to=afState.to;
+  }
+  // else p==='all': no date filter
+
+  let fil=allEntries;
+  if(from)fil=fil.filter(e=>e.datum>=from);
+  if(to)fil=fil.filter(e=>e.datum<=to);
+  if(afState.cats.length)fil=fil.filter(e=>afState.cats.includes(e.haupt));
+  if(afState.subs.length)fil=fil.filter(e=>afState.subs.includes(e.unter));
+  if(afState.pay.length)fil=fil.filter(e=>afState.pay.includes(e.zahlung));
+  return fil;
+}
+function getAfEntries(){
+  // Sync fallback - use in-memory entries
+  const p=afState.period;
+  const now=new Date();
+  const y=now.getFullYear();
+  const mo=now.getMonth();
+  const moStr=String(mo+1).padStart(2,'0');
+  let from='',to='';
+  if(p==='cm'){const ld=new Date(y,mo+1,0).getDate();from=`${y}-${moStr}-01`;to=`${y}-${moStr}-${String(ld).padStart(2,'0')}`;}
+  else if(p==='lm'){const f=new Date(y,mo-1,1),l=new Date(y,mo,0);from=`${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-01`;to=`${l.getFullYear()}-${String(l.getMonth()+1).padStart(2,'0')}-${String(l.getDate()).padStart(2,'0')}`;}
   else if(p==='cy'){from=`${y}-01-01`;to=`${y}-12-31`;}
   else if(p==='range'){from=afState.from;to=afState.to;}
   let fil=entries;
@@ -1103,7 +1146,7 @@ function resetAfFilter(){
   afState={period:'cm',from:'',to:'',cats:[],subs:[],pay:[],group:'cat',sort:'amtD'};
   buildAfFilters();
   saveAfState();
-  rA();
+  setTimeout(()=>rA(),50);
   toast('Filter zur\u00fcckgesetzt');
 }
 function buildAfFilters(){
@@ -1140,20 +1183,19 @@ function updateAfSubChips(){
 function toggleAfCat(el,name){
   el.classList.toggle('on');
   afState.cats=afState.cats.includes(name)?afState.cats.filter(x=>x!==name):[...afState.cats,name];
-  // Clear subs that no longer belong
   const validSubs=new Set(afState.cats.flatMap(cn=>cats.find(c=>c.name===cn)?.subs||[]));
   afState.subs=afState.subs.filter(s=>validSubs.has(s));
-  updateAfSubChips();saveAfState();rA();
+  updateAfSubChips();saveAfState();setTimeout(()=>rA(),50);
 }
 function toggleAfSub(el,name){
   el.classList.toggle('on');
   afState.subs=afState.subs.includes(name)?afState.subs.filter(x=>x!==name):[...afState.subs,name];
-  saveAfState();rA();
+  saveAfState();setTimeout(()=>rA(),50);
 }
 function toggleAfPay(el,name){
   el.classList.toggle('on');
   afState.pay=afState.pay.includes(name)?afState.pay.filter(x=>x!==name):[...afState.pay,name];
-  saveAfState();rA();
+  saveAfState();setTimeout(()=>rA(),50);
 }
 
 function afQuickFilter(catName){
@@ -1176,11 +1218,12 @@ async function saveAfState(){
   if(dot)dot.style.display=hasFilter?'inline-block':'none';
 }
 
-function rA(){
+async function rA(){
   afState.group=document.getElementById('afGroup')?.value||afState.group;
   afState.sort=document.getElementById('afSort')?.value||afState.sort;
   saveAfState();
-  const fil=getAfEntries();
+  // Always load fresh from DB so newly booked DAs are included
+  const fil=await getAfEntriesFresh();
   // Show active filter info
   const infoBar=document.getElementById('aInfoBar');
   if(infoBar){
