@@ -241,7 +241,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="tlo"><div class="tm">&#8364;</div><span class="tn">Ausgaben-Tracker</span></div>
     <div class="tr">
       <div class="pill" id="tpill">&#8212;</div>
-      <button class="ib" title="Export" onclick="xport()">&#8595;</button>
+      <button class="ib" id="exportBtn" title="Daten exportieren (Backup)" onclick="xport()">&#8595;</button>
       <button class="ib" title="Import" onclick="document.getElementById('impF').click()">&#8593;</button>
       <input type="file" id="impF" accept=".json" style="display:none" onchange="importData(this)">
     </div>
@@ -361,6 +361,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <button class="btn sec" onclick="resetAfFilter()" style="font-size:12px;padding:8px">&#10006; Alle Filter zur&#252;cksetzen</button>
     </div>
   </div>
+  <div id="aInfoBar" style="display:none;background:rgba(61,220,132,.08);border:1px solid rgba(61,220,132,.18);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:11px;color:var(--g);font-weight:600"></div>
   <div class="sg" id="aSg"></div>
   <div class="card" style="padding:0"><div id="aList"><div class="emp"><div class="ei">&#128269;</div>Filter setzen um Auswertung zu sehen.</div></div></div>
 </div>
@@ -1167,10 +1168,7 @@ async function saveAfState(){
   afState.from=document.getElementById('afFrom')?.value||'';
   afState.to=document.getElementById('afTo')?.value||'';
   // Only persist period/group/sort – NOT cats/subs/pay (would hide new entries)
-  await saveSetting('afState',{
-    period:afState.period,group:afState.group,sort:afState.sort,
-    from:afState.from,to:afState.to
-  });
+  // afState not persisted - fresh start each session ensures new entries always visible
   // Show dot if any filter active
   const hasFilter=afState.cats.length||afState.subs.length||afState.pay.length||
     afState.period!=='cm'||afState.group!=='cat'||afState.sort!=='amtD';
@@ -1183,6 +1181,17 @@ function rA(){
   afState.sort=document.getElementById('afSort')?.value||afState.sort;
   saveAfState();
   const fil=getAfEntries();
+  // Show active filter info
+  const infoBar=document.getElementById('aInfoBar');
+  if(infoBar){
+    const pLabels={cm:'Dieser Monat',lm:'Letzter Monat',cy:'Dieses Jahr',all:'Alle Zeiträume',range:'Benutzerdefiniert'};
+    let info=pLabels[afState.period]||afState.period;
+    if(afState.cats.length)info+=' · '+afState.cats.join(', ');
+    if(afState.pay.length)info+=' · '+afState.pay.join(', ');
+    info+=` · ${fil.length} Einträge gefunden`;
+    infoBar.textContent=info;
+    infoBar.style.display='';
+  }
   const total=fil.reduce((s,e)=>s+e.betrag,0);
   const mx=fil.length?Math.max(...fil.map(e=>e.betrag)):0;
   const av=fil.length?total/fil.length:0;
@@ -1426,14 +1435,31 @@ function delKat(){
 }
 
 // ── EXPORT / IMPORT ──────────────────────────────────────────
-function xport(){
+async function xport(){
   const now=new Date();
   const d=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   const bk={version:4,exportDate:new Date().toISOString(),entries,cats,budgets,das,income,widgetCfgs,afState};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(bk,null,2)],{type:'application/json'}));
   a.download=`ausgaben_backup_${d}.json`;document.body.appendChild(a);a.click();
-  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast('Backup exportiert \u2713');
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);await saveSetting('lastBackup',Date.now());
+  const epill=document.getElementById('tpill');
+  if(epill){epill.style.background='';epill.style.borderColor='';epill.style.color='';}
+  toast('Backup exportiert \u2713 \u2013 JSON-Datei sicher speichern!');
+}
+
+async function checkBackupReminder(){
+  if(entries.length<5)return;
+  const last=await dGet('settings','lastBackup');
+  if(!last||Date.now()-last.value>7*24*60*60*1000){
+    const pill=document.getElementById('tpill');
+    if(pill){
+      pill.style.background='rgba(240,165,0,.15)';
+      pill.style.borderColor='rgba(240,165,0,.3)';
+      pill.style.color='var(--am)';
+      pill.title='Backup f\u00e4llig! Tippen zum Exportieren';
+    }
+  }
 }
 function importData(input){
   const file=input.files[0];if(!file)return;input.value='';
@@ -1548,12 +1574,14 @@ async function init(){
   const is=await dGet('settings','income');if(is)income=is.value;
   const ws=await dGet('settings','widgetCfgs');if(ws&&ws.value?.length)widgetCfgs=ws.value;
   const wv=await dGet('settings','widgetVisible');if(wv)widgetVisible=new Set(wv.value);
-  const as=await dGet('settings','afState');if(as)afState={...afState,...as.value,cats:[],subs:[],pay:[]};
+  // afState intentionally NOT restored - always start fresh so all entries are visible
   document.getElementById('iDat').value=new Date().toISOString().slice(0,10);
   fillH();fillM();rBanner();rC();
   // Restore tab after SW-reload
   const savedTab=sessionStorage.getItem('restoreTab');
   if(savedTab!==null){sessionStorage.removeItem('restoreTab');const n=parseInt(savedTab);if(n>0&&n<7)go(n);}
+  // Check if backup reminder needed
+  setTimeout(checkBackupReminder, 2000);
 }
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').then(reg => {
