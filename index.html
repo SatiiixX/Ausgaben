@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ausgaben">
 <title>Ausgaben-Tracker</title>
-<!-- VERSION: v3.9 | BUILD: 2026-05-27 22:16:05 -->
+<!-- VERSION: v3.10 | BUILD: 2026-05-27 22:38:24 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -369,6 +369,10 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <span class="af-lbl">Unterkat.</span>
       <div class="af-val"><div class="chips" id="afSubs"></div></div>
     </div>
+    <div class="af-row" id="afSubSubRow" style="display:none">
+      <span class="af-lbl">Unter-Unterkat.</span>
+      <div class="af-val"><div class="chips" id="afSubSubs"></div></div>
+    </div>
     <div class="af-row">
       <span class="af-lbl">Zahlung</span>
       <div class="af-val"><div class="chips" id="afPay"></div></div>
@@ -681,7 +685,7 @@ let widgetCfgs=[...DEF_WIDGETS];
 let editingWidgetId=null;
 
 // Analyse filter state – persisted
-let afState={period:'cm',from:'',to:'',cats:[],subs:[],pay:[],group:'cat',sort:'amtD'};
+let afState={period:'cm',from:'',to:'',cats:[],subs:[],pay:[],subsubs:[],group:'cat',sort:'amtD'};
 
 // Chart widget visibility
 let widgetVisible=new Set(['w1','w2','w3']);
@@ -1234,7 +1238,21 @@ async function getAfEntriesFresh(){
   if(from)fil=fil.filter(e=>e.datum>=from);
   if(to)fil=fil.filter(e=>e.datum<=to);
   if(afState.cats.length)fil=fil.filter(e=>afState.cats.includes(e.haupt));
-  if(afState.subs.length)fil=fil.filter(e=>afState.subs.includes(e.unter));
+  if(afState.subsubs&&afState.subsubs.length)fil=fil.filter(e=>{
+    return afState.subsubs.some(key=>{
+      const parts=key.split('::');
+      // key format: "Cat::Sub::Subsub" or "Sub::Subsub"
+      const subsub=parts[parts.length-1];
+      const sub=parts[parts.length-2];
+      return e.unter===sub&&e.subsub===subsub;
+    });
+  });
+  if(afState.subs.length)fil=fil.filter(e=>{
+    return afState.subs.some(key=>{
+      if(key.includes('::')){const[cat,sub]=key.split('::');return e.haupt===cat&&e.unter===sub;}
+      return e.unter===key; // legacy plain key
+    });
+  });
   if(afState.pay.length)fil=fil.filter(e=>afState.pay.includes(e.zahlung));
   return fil;
 }
@@ -1254,7 +1272,21 @@ function getAfEntries(){
   if(from)fil=fil.filter(e=>e.datum>=from);
   if(to)fil=fil.filter(e=>e.datum<=to);
   if(afState.cats.length)fil=fil.filter(e=>afState.cats.includes(e.haupt));
-  if(afState.subs.length)fil=fil.filter(e=>afState.subs.includes(e.unter));
+  if(afState.subsubs&&afState.subsubs.length)fil=fil.filter(e=>{
+    return afState.subsubs.some(key=>{
+      const parts=key.split('::');
+      // key format: "Cat::Sub::Subsub" or "Sub::Subsub"
+      const subsub=parts[parts.length-1];
+      const sub=parts[parts.length-2];
+      return e.unter===sub&&e.subsub===subsub;
+    });
+  });
+  if(afState.subs.length)fil=fil.filter(e=>{
+    return afState.subs.some(key=>{
+      if(key.includes('::')){const[cat,sub]=key.split('::');return e.haupt===cat&&e.unter===sub;}
+      return e.unter===key; // legacy plain key
+    });
+  });
   if(afState.pay.length)fil=fil.filter(e=>afState.pay.includes(e.zahlung));
   return fil;
 }
@@ -1268,7 +1300,7 @@ function afPeriodChange(){
 
 
 function resetAfFilter(){
-  afState={period:'cm',from:'',to:'',cats:[],subs:[],pay:[],group:'cat',sort:'amtD'};
+  afState={period:'cm',from:'',to:'',cats:[],subs:[],subsubs:[],pay:[],group:'cat',sort:'amtD'};
   buildAfFilters();
   saveAfState();
   setTimeout(()=>rA(),50);
@@ -1291,30 +1323,86 @@ function buildAfFilters(){
   document.getElementById('afRangeRow').style.display=afState.period==='range'?'':'none';
   // Sub chips if cats selected
   updateAfSubChips();
+  if(afState.subsubs?.length)updateAfSubSubChips();
 }
 
+
+function updateAfSubSubChips(){
+  const row=document.getElementById('afSubSubRow');
+  const el=document.getElementById('afSubSubs');
+  if(!row||!el)return;
+  if(!afState.subs.length){row.style.display='none';afState.subsubs=[];return;}
+  // Collect all subsubs for selected subs
+  const items=[];
+  afState.subs.forEach(key=>{
+    const[catN,subN]=key.includes('::')?key.split('::'):[null,key];
+    const cat=catN?cats.find(c=>c.name===catN):null;
+    const ssubs=cat?.subsubs?.[subN]||[];
+    ssubs.forEach(ss=>items.push({label:`${subN} → ${ss}`,key:`${key}::${ss}`,sub:subN,cat:catN}));
+  });
+  if(!items.length){row.style.display='none';return;}
+  row.style.display='';
+  const sel=new Set(afState.subsubs||[]);
+  el.innerHTML=items.map(it=>`<div class="chip ${sel.has(it.key)?'on':''}" onclick="toggleAfSubSub(this,'${it.key.replace(/'/g,"\\'")}')">
+    ${it.label}
+  </div>`).join('');
+}
+
+function toggleAfSubSub(el,key){
+  el.classList.toggle('on');
+  if(!afState.subsubs)afState.subsubs=[];
+  afState.subsubs=afState.subsubs.includes(key)?afState.subsubs.filter(x=>x!==key):[...afState.subsubs,key];
+  saveAfState();setTimeout(()=>rA(),50);
+}
 function updateAfSubChips(){
   const row=document.getElementById('afSubRow');
   const chipsEl=document.getElementById('afSubs');
   if(!afState.cats.length){row.style.display='none';return;}
-  // Collect all subs from selected cats
-  const allSubs=[...new Set(afState.cats.flatMap(cn=>cats.find(c=>c.name===cn)?.subs||[]))];
-  if(!allSubs.length){row.style.display='none';return;}
+  // Build compound keys "CatName::SubName" grouped by category
+  const groups=[];
+  afState.cats.forEach(cn=>{
+    const cat=cats.find(c=>c.name===cn);
+    if(cat&&cat.subs.length)groups.push({cat:cn,subs:cat.subs,color:cat.color});
+  });
+  if(!groups.length){row.style.display='none';return;}
   row.style.display='';
   const selSubs=new Set(afState.subs);
-  chipsEl.innerHTML=allSubs.map(s=>`<div class="chip ${selSubs.has(s)?'on':''}" onclick="toggleAfSub(this,'${s}')">${s}</div>`).join('');
+  let html='';
+  groups.forEach(g=>{
+    // Show category label if multiple categories selected
+    if(afState.cats.length>1){
+      html+=`<div style="width:100%;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:.5px;text-transform:uppercase;margin:4px 0 2px;display:flex;align-items:center;gap:5px">
+        <span style="width:6px;height:6px;border-radius:50%;background:${g.color};display:inline-block"></span>${g.cat}
+      </div>`;
+    }
+    g.subs.forEach(s=>{
+      const key=g.cat+'::'+s;
+      html+=`<div class="chip ${selSubs.has(key)?'on':''}" onclick="toggleAfSub(this,'${key.replace(/'/g,"\\'")}')">
+        ${s}${afState.cats.length===1?'':''}
+      </div>`;
+    });
+  });
+  chipsEl.innerHTML=html;
+  // Also update subsub chips
+  updateAfSubSubChips();
 }
 
 function toggleAfCat(el,name){
   el.classList.toggle('on');
   afState.cats=afState.cats.includes(name)?afState.cats.filter(x=>x!==name):[...afState.cats,name];
-  const validSubs=new Set(afState.cats.flatMap(cn=>cats.find(c=>c.name===cn)?.subs||[]));
-  afState.subs=afState.subs.filter(s=>validSubs.has(s));
-  updateAfSubChips();saveAfState();setTimeout(()=>rA(),50);
+  // Clear subs that belong to removed category (compound keys: "Cat::Sub")
+  afState.subs=afState.subs.filter(key=>{
+    const cat=key.includes('::')?key.split('::')[0]:null;
+    return cat?afState.cats.includes(cat):afState.cats.some(cn=>cats.find(c=>c.name===cn)?.subs.includes(key));
+  });
+  afState.subsubs=[];
+  updateAfSubChips();
+  if(afState.subsubs?.length)updateAfSubSubChips();saveAfState();setTimeout(()=>rA(),50);
 }
 function toggleAfSub(el,name){
   el.classList.toggle('on');
   afState.subs=afState.subs.includes(name)?afState.subs.filter(x=>x!==name):[...afState.subs,name];
+  updateAfSubSubChips();
   saveAfState();setTimeout(()=>rA(),50);
 }
 function toggleAfPay(el,name){
