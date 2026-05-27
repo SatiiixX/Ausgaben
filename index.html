@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ausgaben">
 <title>Ausgaben-Tracker</title>
-<!-- VERSION: v3.6 | BUILD: 2026-05-27 22:01:51 -->
+<!-- VERSION: v3.9 | BUILD: 2026-05-27 22:16:05 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -38,7 +38,7 @@ body{
 #app{display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden}
 /* TOPBAR */
 #top{flex-shrink:0;padding:calc(var(--st)+10px) 14px 0;background:var(--bg0);border-bottom:1px solid var(--b1);width:100%}
-.ti{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;width:100%;overflow:hidden}
+.ti{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;padding-left:2px;padding-right:2px;width:100%;overflow:hidden}
 .tlo{display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden}
 .tm{width:28px;height:28px;flex-shrink:0;border-radius:8px;background:var(--g);color:#0a0c12;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .tn{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -53,7 +53,7 @@ body{
 .tb.on{color:var(--g);border-bottom-color:var(--g)}
 /* PAGES */
 #pgs{flex:1;overflow:hidden;position:relative;width:100%}
-.pg{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:12px 12px calc(24px + var(--sb));display:none;width:100%}
+.pg{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:14px 14px calc(24px + var(--sb));display:none;width:100%}
 .pg.on{display:block}
 /* CARDS */
 .card{background:var(--bg1);border:1px solid var(--b1);border-radius:var(--r);margin-bottom:10px;overflow:hidden;width:100%}
@@ -231,6 +231,34 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:2px}
 
+
+/* ── BOTTOM NAVIGATION ── */
+#bnav{
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:480px;
+  display:flex;background:var(--bg1);
+  border-top:1px solid var(--b2);
+  padding:0 4px var(--sb);
+  z-index:150;
+}
+.bnav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:9px 6px 7px;
+  background:none;border:none;color:var(--t3);cursor:pointer;
+  font-family:inherit;font-size:10px;font-weight:500;
+  gap:3px;transition:color .15s;
+  -webkit-tap-highlight-color:transparent;
+  min-width:0;
+}
+.bnav-btn svg{width:20px;height:20px;flex-shrink:0;transition:stroke .15s}
+.bnav-btn span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.bnav-btn.on{color:var(--g)}
+.bnav-btn.on svg{stroke:var(--g)}
+.bnav-btn:active{opacity:.7}
+/* Adjust page padding for bottom nav */
+.pg{padding-bottom:calc(70px + var(--sb))!important}
+/* Update topbar to not need bottom border since no tabs below */
+#top{border-bottom:none}
 </style>
 </head>
 <body>
@@ -247,15 +275,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
   </div>
 </div>
-<div id="tabs">
-  <button class="tb on" onclick="go(0)">Eingabe</button>
-  <button class="tb" onclick="go(1)">Verlauf</button>
-  <button class="tb" onclick="go(2)">Charts</button>
-  <button class="tb" onclick="go(3)">Analyse<span id="afDot" style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--g);margin-left:4px;vertical-align:middle;display:none"></span></button>
-  <button class="tb" onclick="go(4)">Budget</button>
-  <button class="tb" onclick="go(5)">Dauer</button>
-  <button class="tb" onclick="go(6)">Kategorien</button>
-</div>
+
 <div id="pgs">
 
 <!-- P0 EINGABE -->
@@ -291,19 +311,18 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         oninput="rV()">
       <button class="bsm" onclick="clearVSearch()" id="vClearBtn" style="display:none">&#10006;</button>
     </div>
-    <!-- Filters -->
-    <div style="padding:7px 12px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none">
-      <select id="vMo" onchange="rV()" style="font-size:12px;padding:5px 8px;flex-shrink:0;min-width:0">
-      </select>
-      <select id="vCat" onchange="rV()" style="font-size:12px;padding:5px 8px;flex-shrink:0;min-width:0">
+    <!-- Filters 2x2 grid -->
+    <div style="padding:7px 12px;border-bottom:1px solid var(--b1);display:grid;grid-template-columns:1fr 1fr;gap:5px">
+      <select id="vMo" onchange="rV()" style="font-size:14px;padding:8px 10px;width:100%"></select>
+      <select id="vCat" onchange="rV()" style="font-size:14px;padding:8px 10px;width:100%">
         <option value="">Alle Kategorien</option>
       </select>
-      <select id="vPay" onchange="rV()" style="font-size:12px;padding:5px 8px;flex-shrink:0;min-width:0">
+      <select id="vPay" onchange="rV()" style="font-size:14px;padding:8px 10px;width:100%">
         <option value="">Alle Zahlungsarten</option>
         <option>EC-Karte</option><option>Bar</option><option>Kreditkarte</option>
         <option>Lastschrift</option><option>PayPal</option><option>&#220;berweisung</option>
       </select>
-      <button class="bsm" onclick="clearVFilters()" style="flex-shrink:0;white-space:nowrap">Zur&#252;cksetzen</button>
+      <button onclick="clearVFilters()" style="font-size:13px;font-weight:600;background:var(--bg3);color:var(--t2);border:1px solid var(--b1);border-radius:var(--rs);padding:8px;cursor:pointer;font-family:inherit;width:100%">&#10006; Filter l&#246;schen</button>
     </div>
     <!-- Results count -->
     <div id="vCount" style="padding:5px 13px;font-size:10px;font-weight:600;color:var(--t3);letter-spacing:.5px;text-transform:uppercase;display:none"></div>
@@ -393,8 +412,28 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="card" style="padding:0"><div id="aList"><div class="emp"><div class="ei">&#128269;</div>Filter setzen um Auswertung zu sehen.</div></div></div>
 </div>
 
-<!-- P4 BUDGET -->
+<!-- P5 DAUERAUFTRAEGE -->
 <div class="pg" id="p4">
+  <!-- Daueraufträge Section -->
+  <div class="sl2" style="padding-top:14px">&#128260; Dauerauftr&#228;ge</div>
+  <div class="card" style="margin-bottom:10px">
+    <div class="cb" style="padding-top:10px">
+      <button class="btn out" onclick="oNewDA()">+ Neuer Dauerauftrag</button>
+    </div>
+  </div>
+  <div class="card" style="padding:0"><div id="daL"><div class="emp"><div class="ei">&#128260;</div>Keine.</div></div></div>
+  <div class="sl2">Offene Buchungen diesen Monat</div>
+  <div class="card" style="padding:0"><div id="daPend"><div class="emp">Alle gebucht.</div></div></div>
+  <!-- Kategorien Section -->
+  <div class="sl2" style="padding-top:16px">&#127991;&#65039; Kategorien</div>
+  <div class="card" style="margin-bottom:10px">
+    <div class="cb" style="padding-top:10px">
+      <button class="btn out" onclick="oKat(null)">+ Neue Kategorie</button>
+    </div>
+  </div>
+  <div class="card" style="padding:0"><div id="kL"></div></div>
+  <!-- Budget Section (selten gebraucht – ganz unten) -->
+  <div class="sl2" style="padding-top:16px">&#127919; Budget &amp; Gehalt</div>
   <div class="card" style="margin-bottom:10px">
     <div class="cb" style="padding-top:10px">
       <div class="ms" style="padding:0 0 10px;border:none"><select id="bMo" onchange="rB()"></select></div>
@@ -402,37 +441,39 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
   </div>
   <div class="sg" id="bSg"></div>
-  <div class="sl2">Kategorien-Budget (Ampel)</div>
   <div class="card" style="padding:0"><div id="bList"><div class="emp"><div class="ei">&#127919;</div>Noch kein Budget gesetzt.</div></div></div>
 </div>
 
-<!-- P5 DAUERAUFTRAEGE -->
-<div class="pg" id="p5">
-  <div class="card" style="margin-bottom:10px">
-    <div class="cb" style="padding-top:10px">
-      <button class="btn out" onclick="oNewDA()">+ Neuer Dauerauftrag</button>
-    </div>
-  </div>
-  <div class="sl2">Aktive Dauerauftr&#228;ge</div>
-  <div class="card" style="padding:0"><div id="daL"><div class="emp"><div class="ei">&#128260;</div>Keine.</div></div></div>
-  <div class="sl2">Offene Buchungen diesen Monat</div>
-  <div class="card" style="padding:0"><div id="daPend"><div class="emp">Alle gebucht.</div></div></div>
-</div>
 
-<!-- P6 KATEGORIEN -->
-<div class="pg" id="p6">
-  <div class="card" style="margin-bottom:10px">
-    <div class="cb" style="padding-top:10px">
-      <button class="btn out" onclick="oKat(null)">+ Neue Kategorie</button>
-    </div>
-  </div>
-  <div class="sl2">Kategorien</div>
-  <div class="card" style="padding:0"><div id="kL"></div></div>
-</div>
 
 </div>
 </div>
 <div id="updateBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:600;background:#f0a500;color:#000;padding:10px 14px;font-size:13px;font-weight:600;text-align:center;cursor:pointer" onclick="window.location.reload(true)">&#8635; Neue Version verf\u00fcgbar &#8211; Tippen zum Aktualisieren</div>
+
+<!-- BOTTOM NAV -->
+<nav id="bnav">
+  <button class="bnav-btn on" onclick="goOrReset(0)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    <span>Eingabe</span>
+  </button>
+  <button class="bnav-btn" onclick="goOrReset(1)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    <span>Verlauf</span>
+  </button>
+  <button class="bnav-btn" onclick="goOrReset(2)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <span>Charts</span>
+  </button>
+  <button class="bnav-btn" onclick="goOrReset(3)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <span>Analyse</span>
+  </button>
+  <button class="bnav-btn" onclick="goOrReset(4)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 17.66l-1.41 1.41M21 12h-2M5 12H3M19.07 19.07l-1.41-1.41M5.34 6.34L3.93 4.93M12 21v-2M12 5V3"/></svg>
+    <span>Einstellungen</span>
+  </button>
+</nav>
+
 <div id="toast"></div>
 
 <!-- ENTRY DETAIL -->
@@ -677,25 +718,36 @@ async function saveSetting(k,v){await dPut('settings',{k,value:v})}
   const pg=document.getElementById('pgs');let sx=0,sy=0,lk=null;
   pg.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;lk=null},{passive:true});
   pg.addEventListener('touchmove',e=>{if(!lk){const dx=Math.abs(e.touches[0].clientX-sx),dy=Math.abs(e.touches[0].clientY-sy);lk=dx>dy?'h':'v'}},{passive:true});
-  pg.addEventListener('touchend',e=>{if(lk==='h'){const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>50){const n=curTab+(dx<0?1:-1);if(n>=0&&n<7)go(n)}}},{passive:true});
+  pg.addEventListener('touchend',e=>{if(lk==='h'){const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>50){const n=curTab+(dx<0?1:-1);if(n>=0&&n<5)goOrReset(n)}}},{passive:true});
 })();
 
 // ── NAV ──────────────────────────────────────────────────────
+
+function goOrReset(i){
+  if(curTab===i){
+    // Same tab tapped – reset all filters on this page
+    if(i===1){clearVFilters();}
+    else if(i===3){resetAfFilter();}
+    else if(i===2){document.getElementById('aMo').value=cm();rC();}
+    else if(i===4){document.getElementById('bMo').value=cm();rB();}
+    // Scroll to top of current page
+    const pg=document.getElementById('p'+i);
+    if(pg)pg.scrollTo({top:0,behavior:'smooth'});
+    return;
+  }
+  go(i);
+}
 async function go(i){
   document.querySelectorAll('.pg').forEach((p,j)=>p.classList.toggle('on',j===i));
-  document.querySelectorAll('.tb').forEach((b,j)=>b.classList.toggle('on',j===i));
+  document.querySelectorAll('.bnav-btn').forEach((b,j)=>b.classList.toggle('on',j===i));
   curTab=i;
-  document.querySelectorAll('.tb')[i]?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
-  // Always reload entries fresh when switching tabs
   entries=await ga('entries');
   entries.sort((a,b)=>b.datum.localeCompare(a.datum));
   if(i===0)rBanner();
   if(i===1)rV();
   if(i===2)rC();
   if(i===3){buildAfFilters();setTimeout(()=>rA(),50);}
-  if(i===4)rB();
-  if(i===5)rDA();
-  if(i===6)rKat();
+  if(i===4){rDA();rB();rKat();}
   updP();
 }
 function updP(){
@@ -1776,7 +1828,7 @@ async function init(){
   fillH();fillM();rBanner();rC();
   // Restore tab after SW-reload
   const savedTab=sessionStorage.getItem('restoreTab');
-  if(savedTab!==null){sessionStorage.removeItem('restoreTab');const n=parseInt(savedTab);if(n>0&&n<7)go(n);}
+  if(savedTab!==null){sessionStorage.removeItem('restoreTab');const n=parseInt(savedTab);if(n>0&&n<5)goOrReset(n);}
   // Check if backup reminder needed
   setTimeout(checkBackupReminder, 2000);
 }
