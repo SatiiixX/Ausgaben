@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ausgaben">
 <title>Ausgaben-Tracker</title>
-<!-- VERSION: v3.10 | BUILD: 2026-05-27 22:38:24 -->
+<!-- VERSION: v3.11 | BUILD: 2026-05-29 21:48:42 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -347,6 +347,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <div class="af-val">
         <select id="afPeriod" onchange="afPeriodChange();setTimeout(()=>rA(),50)" style="font-size:13px;padding:6px 10px">
           <option value="cm">Dieser Monat</option>
+          <option value="pp">Aktuelle Gehaltsperiode</option>
           <option value="lm">Letzter Monat</option>
           <option value="cy">Dieses Jahr</option>
           <option value="all">Alle</option>
@@ -539,6 +540,14 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="shan"></div>
     <div class="sht">Budget &amp; Gehalt</div>
     <div class="f"><label>Monatliches Netto-Gehalt (&#8364;)</label><input type="number" id="incInp" placeholder="0.00" step="0.01" min="0" inputmode="decimal"></div>
+  <div class="f">
+    <label>Gehaltseingang (Tag des Monats)</label>
+    <input type="number" id="payDayInp" min="1" max="28" inputmode="numeric" placeholder="1 = Monatsanfang (Standard)">
+    <div style="font-size:11px;color:var(--t2);margin-top:5px;line-height:1.5">
+      Beispiel: Gehalt am 25. &#8594; Periode l&#228;uft vom 25. bis zum 24. des Folgemonats.<br>
+      Leer lassen oder 1 = normaler Kalendermonat.
+    </div>
+  </div>
     <div class="shs" style="margin-top:14px">Kategorien-Budget (&#8364;/Monat)</div>
     <div id="bEdit"></div>
     <div class="brow" style="margin-top:12px">
@@ -667,7 +676,7 @@ const dGet=(s,k)=>new Promise(r=>{const q=db.transaction(s).objectStore(s).get(k
 const clrS=s=>new Promise(r=>{db.transaction(s,'readwrite').objectStore(s).clear().onsuccess=()=>r()});
 
 // ── STATE ────────────────────────────────────────────────────
-let entries=[],cats=[],budgets={},das=[],income=0;
+let entries=[],cats=[],budgets={},das=[],income=0,payDay=1;
 let curTab=0,editEid=null,editKid=null,curDA=null;
 let kSubs=[],kSubsubs={},kColor='',confirmCb=null,impD=null;
 let charts={};
@@ -817,9 +826,6 @@ function fillH(){
 
 // ── INCOME BANNER ────────────────────────────────────────────
 function rBanner(){
-  const mo=cm();
-  // Use in-memory array (already kept in sync after every write)
-  const spent=entries.filter(e=>e.datum.startsWith(mo)).reduce((s,e)=>s+e.betrag,0);
   const el=document.getElementById('iBanner');
   if(!income){
     el.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--b2);border-radius:var(--r);padding:11px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
@@ -827,10 +833,25 @@ function rBanner(){
       <button class="bsm" onclick="go(4);setTimeout(oBudEd,200)">Gehalt eintragen</button>
     </div>`;return;
   }
+  // Use pay period if custom payDay set, otherwise normal month
+  let periodEntries,periodLabel;
+  if(payDay&&payDay>1){
+    const pp=getPayPeriod();
+    periodEntries=entries.filter(e=>e.datum>=pp.from&&e.datum<=pp.to);
+    periodLabel=pp.label;
+  } else {
+    const mo=cm();
+    periodEntries=entries.filter(e=>e.datum.startsWith(mo));
+    periodLabel=fm(mo);
+  }
+  const spent=periodEntries.reduce((s,e)=>s+e.betrag,0);
   const rem=income-spent,pct=Math.min(spent/income*100,100);
   const col=pct<70?'var(--g)':pct<90?'var(--am)':'var(--re)';
   el.innerHTML=`<div class="ibanner">
-    <div class="ib-top"><span class="ib-lbl">${fm(mo)}</span><button class="bsm" onclick="go(4);setTimeout(oBudEd,200)">Bearbeiten</button></div>
+    <div class="ib-top">
+      <span class="ib-lbl">${periodLabel}${payDay>1?' \u00b7 ab '+payDay+'.':''}</span>
+      <button class="bsm" onclick="go(4);setTimeout(oBudEd,200)">Bearbeiten</button>
+    </div>
     <div class="ib-grid">
       <div class="ib2"><div class="sl3">Gehalt</div><div class="sv amt cg">${eur(income)}</div></div>
       <div class="ib2" onclick="go(3)"><div class="sl3">Ausgaben</div><div class="sv amt" style="color:${col}">${eur(spent)}</div></div>
@@ -1267,6 +1288,7 @@ function getAfEntries(){
   if(p==='cm'){const ld=new Date(y,mo+1,0).getDate();from=`${y}-${moStr}-01`;to=`${y}-${moStr}-${String(ld).padStart(2,'0')}`;}
   else if(p==='lm'){const f=new Date(y,mo-1,1),l=new Date(y,mo,0);from=`${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-01`;to=`${l.getFullYear()}-${String(l.getMonth()+1).padStart(2,'0')}-${String(l.getDate()).padStart(2,'0')}`;}
   else if(p==='cy'){from=`${y}-01-01`;to=`${y}-12-31`;}
+  else if(p==='pp'){if(payDay&&payDay>1){const pp=getPayPeriod();from=pp.from;to=pp.to;}else{const ld=new Date(y,mo+1,0).getDate();from=`${y}-${moStr}-01`;to=`${y}-${moStr}-${String(ld).padStart(2,'0')}`;}}
   else if(p==='range'){from=afState.from;to=afState.to;}
   let fil=entries;
   if(from)fil=fil.filter(e=>e.datum>=from);
@@ -1464,7 +1486,8 @@ async function rA(){
   // Show active filter info
   const infoBar=document.getElementById('aInfoBar');
   if(infoBar){
-    const pLabels={cm:'Dieser Monat',lm:'Letzter Monat',cy:'Dieses Jahr',all:'Alle Zeiträume',range:'Benutzerdefiniert'};
+    const pp2=getPayPeriod();
+    const pLabels={cm:'Dieser Monat',pp:'Gehaltsperiode: '+pp2.label,lm:'Letzter Monat',cy:'Dieses Jahr',all:'Alle Zeiträume',range:'Benutzerdefiniert'};
     let info=pLabels[afState.period]||afState.period;
     if(afState.cats.length)info+=' · '+afState.cats.join(', ');
     if(afState.pay.length)info+=' · '+afState.pay.join(', ');
@@ -1557,7 +1580,9 @@ function afDrillDown(grp,k){
 // ── BUDGET ───────────────────────────────────────────────────
 function rB(){
   const mo=document.getElementById('bMo').value||cm();updP();
-  const fil=entries.filter(e=>e.datum.startsWith(mo));
+  let fil;
+  if(payDay&&payDay>1&&!mo){const pp=getPayPeriod();fil=entries.filter(e=>e.datum>=pp.from&&e.datum<=pp.to);}
+  else fil=entries.filter(e=>e.datum.startsWith(mo));
   const total=fil.reduce((s,e)=>s+e.betrag,0);
   const totalB=Object.values(budgets).reduce((s,v)=>s+(v||0),0);
   const rem=income?income-total:totalB-total;
@@ -1585,6 +1610,7 @@ function rB(){
 }
 function oBudEd(){
   document.getElementById('incInp').value=income||'';
+  document.getElementById('payDayInp').value=payDay>1?payDay:'';
   document.getElementById('bEdit').innerHTML=cats.map(c=>`<div class="f">
     <label style="display:flex;align-items:center;gap:5px"><span style="width:7px;height:7px;border-radius:50%;background:${c.color};display:inline-block"></span>${c.name} (\u20ac/Monat)</label>
     <input type="number" id="bud_${c.id}" placeholder="0 = kein Budget" step="0.01" min="0" inputmode="decimal" value="${budgets[c.name]||''}">
@@ -1594,6 +1620,9 @@ function oBudEd(){
 async function saveBud(){
   const iv=parseFloat(document.getElementById('incInp').value);
   income=isNaN(iv)||iv<=0?0:iv;
+  const pdv=parseInt(document.getElementById('payDayInp').value);
+  payDay=isNaN(pdv)||pdv<=1?1:Math.min(pdv,28);
+  await dPut('settings',{k:'payDay',value:payDay});
   cats.forEach(c=>{const el=document.getElementById('bud_'+c.id);if(!el)return;const v=parseFloat(el.value);budgets[c.name]=isNaN(v)||v<=0?0:v});
   await saveSetting('budgets',budgets);await saveSetting('income',income);
   cO('ovB');rB();rBanner();toast('Gespeichert \u2713');
@@ -1805,6 +1834,38 @@ async function doImport(){
 }
 
 
+
+// Returns {from, to, label} for the current pay period based on payDay setting
+function getPayPeriod(refDate){
+  const d=refDate||new Date();
+  const day=d.getDate();
+  const pd=payDay||1;
+  let fromYear,fromMonth,toYear,toMonth,toDay;
+  if(day>=pd){
+    // Period started this month on payDay
+    fromYear=d.getFullYear();fromMonth=d.getMonth();
+  } else {
+    // Period started last month on payDay
+    const prev=new Date(d.getFullYear(),d.getMonth()-1,1);
+    fromYear=prev.getFullYear();fromMonth=prev.getMonth();
+  }
+  const fromD=new Date(fromYear,fromMonth,pd);
+  const toD=new Date(fromYear,fromMonth+1,pd-1);
+  const pad=n=>String(n).padStart(2,'0');
+  const fmt=dt=>`${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
+  const fmtShort=dt=>`${dt.getDate()}. ${['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][dt.getMonth()]}`;
+  return{
+    from:fmt(fromD),
+    to:fmt(toD),
+    label:`${fmtShort(fromD)} – ${fmtShort(toD)}`
+  };
+}
+
+function getPayPeriodEntries(){
+  if(!payDay||payDay===1)return null; // use normal month logic
+  const{from,to}=getPayPeriod();
+  return entries.filter(e=>e.datum>=from&&e.datum<=to);
+}
 // ── AUTO-MIGRATION from previous DB versions ─────────────────
 async function migrateFromOldDB(){
   const oldNames=['ag6','ausgaben5','ausgaben4','ausgaben3','ausgaben_db_v2','ausgaben_db'];
@@ -1909,6 +1970,7 @@ async function init(){
   if(!das.length)das=await ga('da');
   const bs=await dGet('settings','budgets');if(bs)budgets=bs.value;
   const is=await dGet('settings','income');if(is)income=is.value;
+  const pds=await dGet('settings','payDay');if(pds)payDay=pds.value||1;
   const ws=await dGet('settings','widgetCfgs');if(ws&&ws.value?.length)widgetCfgs=ws.value;
   const wv=await dGet('settings','widgetVisible');if(wv)widgetVisible=new Set(wv.value);
   // afState intentionally NOT restored - always start fresh so all entries are visible

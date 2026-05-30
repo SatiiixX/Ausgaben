@@ -1,5 +1,5 @@
 // Cache-Version hochzählen erzwingt komplette Neu-Installation
-const C = 'ag-v14-0527223824';
+const C = 'ag-v15-0529214842';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
